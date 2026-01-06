@@ -1,7 +1,0 @@
-inventory:
-  max_po_value: 50000
-  safety_stock: 55
-markdown_limits:
-  max_depth: 0.5
-risk:
-  tolerance: medium
