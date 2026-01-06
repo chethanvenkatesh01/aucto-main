@@ -1,0 +1,24 @@
+{
+  "SKU-101": {
+    "name": "Wireless Noise-Canceling Headphones",
+    "inventory_level": 420,
+    "safety_stock": 500,
+    "cost_price": 120.00,
+    "current_price": 199.99,
+    "competitor_price": 185.00,
+    "pending_pos": 50,
+    "margin_floor": 0.20,
+    "supplier_lead_time_days": 14
+  },
+  "SKU-102": {
+    "name": "Smart Fitness Watch Gen 4",
+    "inventory_level": 1500,
+    "safety_stock": 800,
+    "cost_price": 85.00,
+    "current_price": 149.99,
+    "competitor_price": 149.99,
+    "pending_pos": 0,
+    "margin_floor": 0.15,
+    "supplier_lead_time_days": 7
+  }
+}
