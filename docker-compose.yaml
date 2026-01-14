@@ -1,28 +1,105 @@
 version: '3.8'
 
 services:
-  # The Cognitive Engine
-  kernel:
-    build: ./backend
-    container_name: ados_kernel
+  # ==========================================
+  # LAYER 1: THE PHYSICAL SUBSTRATE (Database & Cache)
+  # ==========================================
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: auctorian_db
+    restart: always
+    environment:
+      POSTGRES_USER: auctorian
+      POSTGRES_PASSWORD: sovereign_password
+      POSTGRES_DB: auctorian_ledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auctorian -d auctorian_ledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: auctorian_cache
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: auctorian_memory
+    restart: always
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # ==========================================
+  # LAYER 2: THE COGNITIVE KERNEL (Backend)
+  # ==========================================
+
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: auctorian_kernel
+    restart: always
     ports:
       - "8000:8000"
     volumes:
-      # Persist the Ledger and ML Models outside the container
-      - ./backend/ados_ledger.db:/app/ados_ledger.db
+      # Hot-Reloading for Dev: Mounts your local code into the container
+      - ./backend:/app
+      # Persist ML models locally
       - ./backend/model_store.joblib:/app/model_store.joblib
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-    restart: always
+      # SOVEREIGN CONNECTIONS (Internal Docker Network)
+      - DATABASE_URL=postgresql://auctorian:sovereign_password@postgres:5432/auctorian_ledger
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      
+      # THE BRIDGE TO THE BEAST (Host GPU Access)
+      # This allows Docker to see 'localhost:11434' on your Windows/Linux host
+      - LOCAL_LLM_URL=http://host.docker.internal:11434/v1/chat/completions
+      
+      # CLOUD KEY (Disabled for Sovereignty - Uncomment if fallback needed)
+      # - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    extra_hosts:
+      # CRITICAL: This maps 'host.docker.internal' to the actual host machine IP
+      - "host.docker.internal:host-gateway"
 
-  # The Experience Layer
+  # ==========================================
+  # LAYER 3: THE EXPERIENCE (Frontend)
+  # ==========================================
+
   cockpit:
     build: 
       context: .
       dockerfile: Dockerfile
-    container_name: ados_cockpit
+    container_name: auctorian_cockpit
     ports:
       - "3000:80"
     depends_on:
-      - kernel
+      - backend
     restart: always
+
+# ==========================================
+# PERSISTENCE VOLUMES
+# ==========================================
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
