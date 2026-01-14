@@ -69,7 +69,7 @@ async def boot_sequence():
     logger.info("🟢 [SYSTEM] Initiating Auctorian Boot Sequence...")
     
     # 1. SQL Initialization
-    init_db()
+    init_db("ados_ledger.db")
     logger.info("💽 [STORAGE] SQL Ledger Initialized.")
 
     # 2. Physics Check (The "Beast" Wake-up Call)
@@ -205,3 +205,4 @@ def health_check():
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
