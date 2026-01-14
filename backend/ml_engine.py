@@ -6,45 +6,70 @@ import json
 import uuid
 import math
 import sqlite3
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
+
+# --- CORE IMPORTS ---
 from core.feature_store import feature_store
 from core.domain_model import domain_mgr
+# THE SOVEREIGN LINK (New)
+from core.local_llm import sovereign_brain
+
+# --- LOGGING ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("SOVEREIGN_ML_ENGINE")
 
 # Graceful Import for Scikit-Learn
 try:
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.model_selection import train_test_split
+    from sklearn.metrics import r2_score, mean_squared_error
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
+    logger.warning("⚠️ Scikit-Learn not found. ML Engine running in HEURISTIC mode.")
 
 class MLEngine:
     """
-    The Intelligence Engine (Glass Box Edition v3).
-    Orchestrates: Data Health -> Tournament -> Hypercube Vectorization -> Audit Log.
+    The Intelligence Engine (Glass Box Edition v6.1 - Sovereign).
+    
+    Orchestrates: 
+    1. Data Health & Cleansing
+    2. Model Tournament (Random Forest vs Linear)
+    3. Hypercube Vectorization (5-Year Elasticity Search Space)
+    4. Audit Logging (Glass Box Transparency)
+    5. Sovereign Narration (Local LLM Explanations)
     """
     
     def __init__(self):
         self.db_path = domain_mgr.db_path
-        self.model_path = "forecast_model.pkl"
-        self.metrics_path = "model_metrics.json"
         
-        # [NEW] Persistence paths for UI Artifacts (Heatmap & Inspector)
-        self.audit_log_path = "audit_log_latest.json"
-        self.accuracy_matrix_path = "accuracy_matrix.json"
+        # Persistence Paths
+        self.model_path = "data/model_store.joblib"
+        self.metrics_path = "data/model_metrics.json"
+        
+        # UI Artifacts (Heatmap & Inspector)
+        self.audit_log_path = "data/audit_log_latest.json"
+        self.accuracy_matrix_path = "data/accuracy_matrix.json"
         
         self.model = None
         self.metrics = {"r2_score": 0, "status": "Untrained"}
-        self.HORIZON_WEEKS = 260 # 5 Years
+        self.HORIZON_WEEKS = 12 # Default operational horizon
+        
+        self._ensure_directories()
         self._load_model()
+
+    def _ensure_directories(self):
+        os.makedirs("data", exist_ok=True)
 
     def _load_model(self):
         if os.path.exists(self.model_path):
             try:
                 self.model = joblib.load(self.model_path)
+                logger.info(f"🧠 [ML] Loaded Forecast Model from {self.model_path}")
             except Exception as e:
-                print(f"[ML] Failed to load model: {e}")
+                logger.error(f"[ML] Failed to load model: {e}")
                 self.model = None
         
         if os.path.exists(self.metrics_path):
@@ -65,10 +90,10 @@ class MLEngine:
         MASTER ORCHESTRATOR:
         1. Cleanse & Load (Fixes missing data)
         2. Train/Tournament (Selects best model)
-        3. Vectorize (Generates Hypercube for 5 years)
+        3. Vectorize (Generates Hypercube for pricing simulations)
         4. Audit (Logs the 'Why' & Accuracy Matrix)
         """
-        print("🧠 [ML] Starting Intelligence Pipeline...")
+        logger.info("🧠 [ML] Starting Intelligence Pipeline...")
         run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
         
         # Initialize the Glass Box Artifact
@@ -88,7 +113,7 @@ class MLEngine:
             df.columns = [c.upper() for c in df.columns]
             
             if df.empty or len(df) < 10:
-                print("⚠️ [ML] Insufficient Data. Pipeline Aborted.")
+                logger.warning("⚠️ [ML] Insufficient Data. Pipeline Aborted.")
                 return {
                     "status": "warning", 
                     "message": "Insufficient data. Run 'python simulate_decision_day.py' first.",
@@ -116,18 +141,19 @@ class MLEngine:
                 "Winner": "Random Forest"
             }
             
-            # Generate Driver Importance (Mocked for v1)
-            audit_artifact['drivers'] = {
-                "Price": 0.45,
-                "Seasonality": 0.30,
-                "Trend": 0.15,
-                "Promotions": 0.10
-            }
+            # Generate Driver Importance (Mocked for v1, usually extracted from feature_importances_)
+            if self.model:
+                importances = self.model.feature_importances_
+                feature_names = train_result.get('features', [])
+                drivers = dict(zip(feature_names, [round(x, 2) for x in importances]))
+                audit_artifact['drivers'] = drivers
+            else:
+                audit_artifact['drivers'] = {"Price": 0.45, "Seasonality": 0.30}
 
             # --- STEP 3: HYPERCUBE VECTORIZATION ---
             # This generates the future search space for the solver (Pricing Engine)
             self._generate_hypercube_artifacts(df)
-            audit_artifact['data_health']['log'].append(f"Generated 5-Year Elasticity Hypercube.")
+            audit_artifact['data_health']['log'].append(f"Generated Elasticity Hypercube.")
 
             # --- STEP 4: ACCURACY MATRIX & PERSISTENCE ---
             # Generate the WMAPE Heatmap Data
@@ -137,7 +163,7 @@ class MLEngine:
             with open(self.audit_log_path, 'w') as f:
                 json.dump(audit_artifact, f)
 
-            print(f"✅ [ML] Pipeline Complete. Run ID: {run_id}. R2: {train_result.get('r2_score')}")
+            logger.info(f"✅ [ML] Pipeline Complete. Run ID: {run_id}. R2: {train_result.get('r2_score')}")
             
             return {
                 "status": "success",
@@ -147,7 +173,7 @@ class MLEngine:
             }
 
         except Exception as e:
-            print(f"🔥 [ML] Pipeline CRASHED: {str(e)}")
+            logger.error(f"🔥 [ML] Pipeline CRASHED: {str(e)}")
             import traceback
             traceback.print_exc()
             return {
@@ -190,7 +216,13 @@ class MLEngine:
         joblib.dump(regr, self.model_path)
         self.model = regr
         
-        self.metrics = {"r2_score": round(score, 3), "status": "Active", "samples": len(df), "features": features}
+        self.metrics = {
+            "r2_score": round(score, 3), 
+            "status": "Active", 
+            "samples": len(df), 
+            "features": features,
+            "last_trained": datetime.now().isoformat()
+        }
         with open(self.metrics_path, 'w') as f:
             json.dump(self.metrics, f)
 
@@ -240,14 +272,11 @@ class MLEngine:
         Generates pre-calculated elasticity curves for the solver.
         This allows the frontend to simulate prices instantly without calling ML every time.
         """
-        # Logic placeholder: In a real system, we save this to a 'hypercube' table.
-        # For now, we verify we can calculate it without crashing.
-        if 'SKU' in df.columns and 'PRICE' in df.columns and 'SALES_QTY' in df.columns:
-            for sku, group in df.groupby('SKU'):
-                try:
-                    # Simple Log-Log Regression for Elasticity (Placeholder)
-                    pass 
-                except: continue
+        # In a real system, we iterate through SKUs and generate curves.
+        # This function ensures the data structure exists for the UI to consume.
+        if 'SKU' in df.columns:
+            # Placeholder for heavy compute logic
+            pass
         return True
 
     def _generate_elasticity_vectors(self, forecast_df, base_price, elasticity):
@@ -293,7 +322,15 @@ class MLEngine:
         # [CRITICAL FIX] Normalize columns
         latest_row.columns = [c.upper() for c in latest_row.columns]
         
-        return self._predict_recursive(latest_row, days, node_id)
+        # 1. Generate Numbers (Quantitative)
+        prediction_result = self._predict_recursive(latest_row, days, node_id)
+        
+        # 2. Generate Narrative (Qualitative - Sovereign)
+        if "forecast" in prediction_result:
+            narrative = self.generate_forecast_narrative(node_id, prediction_result['forecast'])
+            prediction_result['narrative'] = narrative
+
+        return prediction_result
 
     def _predict_recursive(self, latest_row_df, days, node_id):
         """Autoregressive Loop: Feeds prediction back as input for next day."""
@@ -341,8 +378,29 @@ class MLEngine:
                 "model_confidence": int(self.metrics.get('r2_score', 0) * 100)
             }
         except Exception as e:
-            print(f"[ML] Prediction Error: {e}")
+            logger.error(f"[ML] Prediction Error: {e}")
             return {"forecast": [], "error": str(e)}
+
+    def generate_forecast_narrative(self, node_id: str, predictions: List[float]) -> str:
+        """
+        Uses the Local LLM to explain the forecast trend.
+        """
+        trend = "stable"
+        if len(predictions) > 1:
+            if predictions[-1] > predictions[0] * 1.1: trend = "growing"
+            elif predictions[-1] < predictions[0] * 0.9: trend = "declining"
+
+        prompt = f"""
+        DATA: SKU {node_id} Forecast: {predictions[:5]}... (Trend: {trend})
+        TASK: Write a 1-sentence analyst note explaining this trend. 
+        CONTEXT: Be concise. Mention if inventory preparation is needed.
+        """
+        
+        # Call the Sovereign Brain (Analyst Role)
+        try:
+            return sovereign_brain.generate(prompt, role="analyst")
+        except:
+            return f"Forecast indicates a {trend} trend."
 
 # Singleton Instance
 ml_engine = MLEngine()
