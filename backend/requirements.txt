@@ -1,3 +1,4 @@
+# --- CORE API SERVER ---
 fastapi==0.109.0
 uvicorn==0.27.0
 pydantic==2.6.0
@@ -5,11 +6,21 @@ pydantic-settings==2.1.0
 python-multipart
 pyyaml
 httpx
+
+# --- DATA SCIENCE (The Logic Layer) ---
 pandas
-google-generativeai
+numpy
 scikit-learn
 joblib
-numpy
 
+# --- SOVEREIGN INFRASTRUCTURE (The Body) ---
+requests>=2.31.0        # Critical: Required for local_llm.py to talk to Ollama
+psycopg2-binary>=2.9.9  # Critical: Driver for the Dockerized Postgres
+asyncpg>=0.29.0         # Critical: Async driver for high-performance DB queries
+redis>=5.0.0            # Critical: Driver for the Dockerized Redis Cache
+qdrant-client>=1.7.0    # Critical: Driver for the Vector Memory (Context Hydration)
+
+# --- CLOUD DEPENDENCIES (Disabled for Sovereignty) ---
+# google-generativeai   # COMMENTED OUT to prevent accidental cloud leakage
 
 
